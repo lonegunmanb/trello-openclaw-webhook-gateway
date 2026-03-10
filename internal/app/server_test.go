@@ -127,32 +127,13 @@ func TestPostValidSignatureForwards(t *testing.T) {
 		t.Fatalf("unexpected auth header: %q", got.AuthHeader)
 	}
 
-	var wrapped map[string]any
-	if err := json.Unmarshal(got.Body, &wrapped); err != nil {
-		t.Fatalf("unmarshal wrapped body: %v", err)
-	}
-	if _, ok := wrapped["model"]; ok {
-		t.Fatalf("model should not be present: %v", wrapped)
-	}
-	msg, ok := wrapped["message"].(string)
-	if !ok {
-		t.Fatalf("message must be string, got %T", wrapped["message"])
-	}
-	decodedRaw, err := base64.StdEncoding.DecodeString(msg)
-	if err != nil {
-		t.Fatalf("decode raw payload: %v", err)
-	}
-
 	var raw map[string]any
-	if err := json.Unmarshal(decodedRaw, &raw); err != nil {
-		t.Fatalf("unmarshal decoded raw payload: %v", err)
-	}
-	if raw["readable_message"] == "" {
-		t.Fatalf("decoded raw payload missing readable_message: %v", raw)
+	if err := json.Unmarshal(got.Body, &raw); err != nil {
+		t.Fatalf("unmarshal forwarded body: %v", err)
 	}
 	action, _ := raw["action"].(map[string]any)
 	if action == nil || action["type"] != "updateCard" {
-		t.Fatalf("decoded raw payload missing action.type: %v", raw)
+		t.Fatalf("forwarded body missing action.type: %v", raw)
 	}
 }
 

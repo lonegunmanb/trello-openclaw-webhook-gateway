@@ -39,8 +39,7 @@ func NewRouter(cfg Config, client *http.Client, logger *log.Logger) *gin.Engine 
 			return
 		}
 
-		msg := BuildMessage(raw)
-		status, respBody, err := forwarder.Forward(c.Request.Context(), msg, raw)
+		status, respBody, err := forwarder.Forward(c.Request.Context(), raw)
 		if err != nil {
 			logger.Printf("forward failed: %v", err)
 			c.Status(http.StatusBadGateway)

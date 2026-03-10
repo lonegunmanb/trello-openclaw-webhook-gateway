@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -21,7 +20,7 @@ func TestForwardSetsAuthorizationHeader(t *testing.T) {
 	defer srv.Close()
 
 	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: time.Second})
-	_, _, err := f.Forward(context.Background(), "hi", []byte(`{"k":"v"}`))
+	_, _, err := f.Forward(context.Background(), []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
 	}
@@ -39,7 +38,7 @@ func TestForwardContentTypeJSON(t *testing.T) {
 	defer srv.Close()
 
 	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: time.Second})
-	_, _, err := f.Forward(context.Background(), "hi", []byte(`{"k":"v"}`))
+	_, _, err := f.Forward(context.Background(), []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
 	}
@@ -48,7 +47,7 @@ func TestForwardContentTypeJSON(t *testing.T) {
 	}
 }
 
-func TestForwardBodyShape(t *testing.T) {
+func TestForwardBodySlimmed(t *testing.T) {
 	var body []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
@@ -57,46 +56,94 @@ func TestForwardBodyShape(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	raw := []byte(`{
+		"action": {
+			"type": "updateCard",
+			"data": {
+				"card": {"id": "69ae188a", "name": "[AVM Module Issue]: ...", "desc": "ignored"},
+				"listBefore": {"name": "Backlog", "id": "x"},
+				"listAfter": {"name": "Analyze", "id": "y"},
+				"board": {"name": "Main Board"}
+			},
+			"memberCreator": {"fullName": "HeZijie", "username": "hzj"},
+			"id": "action-id"
+		},
+		"model": "should-not-forward"
+	}`)
 	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: time.Second})
-	_, _, err := f.Forward(context.Background(), "hello", []byte(`{"k":"v"}`))
+	_, _, err := f.Forward(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("forward: %v", err)
 	}
 
-	var v map[string]any
-	if err := json.Unmarshal(body, &v); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if v["name"] != "Trello" || v["deliver"] != false {
-		t.Fatalf("unexpected payload: %v", v)
-	}
-	if _, ok := v["channel"]; ok {
-		t.Fatalf("channel should not be present: %v", v)
-	}
-	if _, ok := v["to"]; ok {
-		t.Fatalf("to should not be present: %v", v)
-	}
-	msg, ok := v["message"].(string)
-	if !ok {
-		t.Fatalf("message must be string, got %T", v["message"])
-	}
-	decodedRaw, err := base64.StdEncoding.DecodeString(msg)
-	if err != nil {
-		t.Fatalf("decode raw payload: %v", err)
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("unmarshal forwarded body: %v", err)
 	}
 
-	var raw map[string]any
-	if err := json.Unmarshal(decodedRaw, &raw); err != nil {
-		t.Fatalf("unmarshal decoded raw payload: %v", err)
+	action, ok := got["action"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing action: %v", got)
 	}
-	if raw["k"] != "v" {
-		t.Fatalf("decoded raw payload missing original field: %v", raw)
+	if action["type"] != "updateCard" {
+		t.Fatalf("unexpected action.type: %v", action)
 	}
-	if raw["readable_message"] != "hello" {
-		t.Fatalf("decoded raw payload missing readable_message: %v", raw)
+
+	data, ok := action["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing action.data: %v", action)
 	}
-	if _, ok := v["model"]; ok {
-		t.Fatalf("model should not be present: %v", v)
+	card, ok := data["card"].(map[string]any)
+	if !ok || card["id"] != "69ae188a" {
+		t.Fatalf("unexpected card: %v", data["card"])
+	}
+	if _, ok := card["name"]; ok {
+		t.Fatalf("card.name should be removed: %v", card)
+	}
+	if _, ok := card["desc"]; ok {
+		t.Fatalf("card.desc should be removed: %v", card)
+	}
+
+	listBefore, ok := data["listBefore"].(map[string]any)
+	if !ok || listBefore["name"] != "Backlog" {
+		t.Fatalf("unexpected listBefore: %v", data["listBefore"])
+	}
+	if _, ok := listBefore["id"]; ok {
+		t.Fatalf("listBefore.id should be removed: %v", listBefore)
+	}
+
+	listAfter, ok := data["listAfter"].(map[string]any)
+	if !ok || listAfter["name"] != "Analyze" {
+		t.Fatalf("unexpected listAfter: %v", data["listAfter"])
+	}
+	if _, ok := listAfter["id"]; ok {
+		t.Fatalf("listAfter.id should be removed: %v", listAfter)
+	}
+	if _, ok := data["board"]; ok {
+		t.Fatalf("action.data.board should be removed: %v", data)
+	}
+
+	if _, ok := action["memberCreator"]; ok {
+		t.Fatalf("memberCreator should be removed: %v", action)
+	}
+	if _, ok := action["id"]; ok {
+		t.Fatalf("action.id should be removed: %v", action)
+	}
+	if _, ok := got["model"]; ok {
+		t.Fatalf("top-level model should be removed: %v", got)
+	}
+}
+
+func TestForwardRejectsInvalidJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: time.Second})
+	_, _, err := f.Forward(context.Background(), []byte(`not-json`))
+	if err == nil {
+		t.Fatal("expected invalid json error")
 	}
 }
 
@@ -108,7 +155,7 @@ func TestForwardPropagatesResponseStatus(t *testing.T) {
 	defer srv.Close()
 
 	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: time.Second})
-	status, respBody, err := f.Forward(context.Background(), "hello", []byte(`{"k":"v"}`))
+	status, respBody, err := f.Forward(context.Background(), []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
 	}
@@ -128,7 +175,7 @@ func TestForwardTimeout(t *testing.T) {
 	defer srv.Close()
 
 	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: 10 * time.Millisecond})
-	_, _, err := f.Forward(context.Background(), "hello", []byte(`{"k":"v"}`))
+	_, _, err := f.Forward(context.Background(), []byte(`{"k":"v"}`))
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
