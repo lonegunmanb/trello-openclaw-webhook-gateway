@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -29,9 +30,7 @@ func (f *Forwarder) Forward(ctx context.Context, message string, rawBody []byte)
 	payload := map[string]any{
 		"message": fullMessage,
 		"name":    "Trello",
-		"deliver": true,
-		"channel": "telegram",
-		"to":      "399076135",
+		"deliver": false,
 		"model":   f.model,
 	}
 
@@ -39,6 +38,7 @@ func (f *Forwarder) Forward(ctx context.Context, message string, rawBody []byte)
 	if err != nil {
 		return 0, nil, fmt.Errorf("marshal forward payload: %w", err)
 	}
+	log.Printf("forward_payload=%s", string(b))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.forwardURL, bytes.NewReader(b))
 	if err != nil {

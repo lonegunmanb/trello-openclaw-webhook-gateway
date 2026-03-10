@@ -70,9 +70,7 @@ Why this matters for Trello integration:
 {
   "message": "<human readable summary>\n\nRaw payload (base64):\n<base64 trello json>",
   "name": "Trello",
-  "deliver": true,
-  "channel": "telegram",
-  "to": "399076135",
+  "deliver": false,
   "model": "<your configured model>"
 }
 ```

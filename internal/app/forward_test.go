@@ -67,8 +67,14 @@ func TestForwardBodyShape(t *testing.T) {
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if v["name"] != "Trello" || v["deliver"] != true || v["channel"] != "telegram" || v["to"] != "399076135" {
+	if v["name"] != "Trello" || v["deliver"] != false {
 		t.Fatalf("unexpected payload: %v", v)
+	}
+	if _, ok := v["channel"]; ok {
+		t.Fatalf("channel should not be present: %v", v)
+	}
+	if _, ok := v["to"]; ok {
+		t.Fatalf("to should not be present: %v", v)
 	}
 	msg, ok := v["message"].(string)
 	if !ok {
