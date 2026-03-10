@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -54,7 +53,7 @@ func TestHeadReturns200(t *testing.T) {
 	forwardSrv, _ := setupForwardServer(t, http.StatusOK, "ok")
 	defer forwardSrv.Close()
 
-	cfg := Config{ListenAddr: ":0", TrelloSecret: "secret", CallbackURL: "https://example.com/trello", ForwardURL: forwardSrv.URL, ForwardToken: "token", Model: "copilot-api/claude-haiku-4.5", Prompt: "Please process Trello events:"}
+	cfg := Config{ListenAddr: ":0", TrelloSecret: "secret", CallbackURL: "https://example.com/trello", ForwardURL: forwardSrv.URL, ForwardToken: "token"}
 	r := NewRouter(cfg, &http.Client{Timeout: time.Second}, log.Default())
 
 	rr := httptest.NewRecorder()
@@ -69,7 +68,7 @@ func TestPostRejectsBadSignature403(t *testing.T) {
 	forwardSrv, ch := setupForwardServer(t, http.StatusOK, "ok")
 	defer forwardSrv.Close()
 
-	cfg := Config{ListenAddr: ":0", TrelloSecret: "secret", CallbackURL: "https://example.com/trello", ForwardURL: forwardSrv.URL, ForwardToken: "token", Model: "copilot-api/claude-haiku-4.5", Prompt: "Please process Trello events:"}
+	cfg := Config{ListenAddr: ":0", TrelloSecret: "secret", CallbackURL: "https://example.com/trello", ForwardURL: forwardSrv.URL, ForwardToken: "token"}
 	r := NewRouter(cfg, &http.Client{Timeout: time.Second}, log.Default())
 
 	body := payload(t, map[string]any{"action": map[string]any{"type": "updateCard"}})
@@ -92,7 +91,7 @@ func TestPostValidSignatureForwards(t *testing.T) {
 	forwardSrv, ch := setupForwardServer(t, http.StatusAccepted, "accepted")
 	defer forwardSrv.Close()
 
-	cfg := Config{ListenAddr: ":0", TrelloSecret: "secret", CallbackURL: "https://example.com/trello", ForwardURL: forwardSrv.URL, ForwardToken: "fwd-token", Model: "copilot-api/claude-haiku-4.5", Prompt: "Please process Trello events:"}
+	cfg := Config{ListenAddr: ":0", TrelloSecret: "secret", CallbackURL: "https://example.com/trello", ForwardURL: forwardSrv.URL, ForwardToken: "fwd-token"}
 	r := NewRouter(cfg, &http.Client{Timeout: time.Second}, log.Default())
 
 	body := payload(t, map[string]any{
@@ -132,19 +131,28 @@ func TestPostValidSignatureForwards(t *testing.T) {
 	if err := json.Unmarshal(got.Body, &wrapped); err != nil {
 		t.Fatalf("unmarshal wrapped body: %v", err)
 	}
-	if wrapped["model"] != "copilot-api/claude-haiku-4.5" {
-		t.Fatalf("unexpected model: %v", wrapped["model"])
+	if _, ok := wrapped["model"]; ok {
+		t.Fatalf("model should not be present: %v", wrapped)
 	}
 	msg, ok := wrapped["message"].(string)
 	if !ok {
 		t.Fatalf("message must be string, got %T", wrapped["message"])
 	}
-	if !strings.HasPrefix(msg, "Please process Trello events:\n\n") {
-		t.Fatalf("message should start with prompt, got: %s", msg)
+	decodedRaw, err := base64.StdEncoding.DecodeString(msg)
+	if err != nil {
+		t.Fatalf("decode raw payload: %v", err)
 	}
-	encodedBody := base64.StdEncoding.EncodeToString(body)
-	if !strings.Contains(msg, "Raw payload (base64):") || !strings.Contains(msg, encodedBody) {
-		t.Fatalf("message missing raw payload section: %s", msg)
+
+	var raw map[string]any
+	if err := json.Unmarshal(decodedRaw, &raw); err != nil {
+		t.Fatalf("unmarshal decoded raw payload: %v", err)
+	}
+	if raw["readable_message"] == "" {
+		t.Fatalf("decoded raw payload missing readable_message: %v", raw)
+	}
+	action, _ := raw["action"].(map[string]any)
+	if action == nil || action["type"] != "updateCard" {
+		t.Fatalf("decoded raw payload missing action.type: %v", raw)
 	}
 }
 
@@ -152,7 +160,7 @@ func TestPostPropagatesDownstreamStatus(t *testing.T) {
 	forwardSrv, _ := setupForwardServer(t, http.StatusNoContent, "")
 	defer forwardSrv.Close()
 
-	cfg := Config{ListenAddr: ":0", TrelloSecret: "secret", CallbackURL: "https://example.com/trello", ForwardURL: forwardSrv.URL, ForwardToken: "token", Model: "copilot-api/claude-haiku-4.5", Prompt: "Please process Trello events:"}
+	cfg := Config{ListenAddr: ":0", TrelloSecret: "secret", CallbackURL: "https://example.com/trello", ForwardURL: forwardSrv.URL, ForwardToken: "token"}
 	r := NewRouter(cfg, &http.Client{Timeout: time.Second}, log.Default())
 
 	body := payload(t, map[string]any{"action": map[string]any{"type": "updateCard"}})
@@ -172,7 +180,7 @@ func TestMethodNotAllowed(t *testing.T) {
 	forwardSrv, _ := setupForwardServer(t, http.StatusOK, "ok")
 	defer forwardSrv.Close()
 
-	cfg := Config{ListenAddr: ":0", TrelloSecret: "secret", CallbackURL: "https://example.com/trello", ForwardURL: forwardSrv.URL, ForwardToken: "token", Model: "copilot-api/claude-haiku-4.5", Prompt: "Please process Trello events:"}
+	cfg := Config{ListenAddr: ":0", TrelloSecret: "secret", CallbackURL: "https://example.com/trello", ForwardURL: forwardSrv.URL, ForwardToken: "token"}
 	r := NewRouter(cfg, &http.Client{Timeout: time.Second}, log.Default())
 
 	rr := httptest.NewRecorder()

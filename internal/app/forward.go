@@ -7,38 +7,43 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 )
 
 type Forwarder struct {
 	forwardURL   string
 	forwardToken string
-	model        string
-	prompt       string
 	client       *http.Client
 }
 
-func NewForwarder(forwardURL, forwardToken, model, prompt string, client *http.Client) *Forwarder {
-	return &Forwarder{forwardURL: forwardURL, forwardToken: forwardToken, model: model, prompt: prompt, client: client}
+func NewForwarder(forwardURL, forwardToken string, client *http.Client) *Forwarder {
+	return &Forwarder{forwardURL: forwardURL, forwardToken: forwardToken, client: client}
 }
 
 func (f *Forwarder) Forward(ctx context.Context, message string, rawBody []byte) (int, []byte, error) {
-	rawPayloadBase64 := base64.StdEncoding.EncodeToString(rawBody)
-	fullMessage := f.prompt + "\n\n" + message + "\n\nRaw payload (base64):\n" + rawPayloadBase64
+	var rawPayload map[string]any
+	if err := json.Unmarshal(rawBody, &rawPayload); err != nil {
+		return 0, nil, fmt.Errorf("raw body must be valid json: %w", err)
+	}
+	rawPayload["readable_message"] = message
+
+	enrichedRawBody, err := json.Marshal(rawPayload)
+	if err != nil {
+		return 0, nil, fmt.Errorf("marshal enriched raw body: %w", err)
+	}
+
+	rawPayloadBase64 := base64.StdEncoding.EncodeToString(enrichedRawBody)
 
 	payload := map[string]any{
-		"message": fullMessage,
+		"message": rawPayloadBase64,
 		"name":    "Trello",
 		"deliver": false,
-		"model":   f.model,
 	}
 
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return 0, nil, fmt.Errorf("marshal forward payload: %w", err)
 	}
-	log.Printf("forward_payload=%s", string(b))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.forwardURL, bytes.NewReader(b))
 	if err != nil {

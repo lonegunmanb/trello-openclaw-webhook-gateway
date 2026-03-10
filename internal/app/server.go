@@ -17,7 +17,7 @@ func NewRouter(cfg Config, client *http.Client, logger *log.Logger) *gin.Engine 
 		c.Status(http.StatusMethodNotAllowed)
 	})
 
-	forwarder := NewForwarder(cfg.ForwardURL, cfg.ForwardToken, cfg.Model, cfg.Prompt, client)
+	forwarder := NewForwarder(cfg.ForwardURL, cfg.ForwardToken, client)
 
 	r.HEAD("/", func(c *gin.Context) {
 		c.Status(http.StatusOK)
