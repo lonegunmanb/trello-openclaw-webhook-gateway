@@ -23,7 +23,7 @@ This project was built specifically to solve that integration gap.
 
 - Framework: `github.com/gin-gonic/gin`
 - Architecture: `main` is separated from business logic
-  - Entry point: `cmd/trello-webhook-gateway/main.go`
+  - Entry point: `cmd/trello-openclaw-webhook-gateway/main.go`
   - Business logic: `internal/app/*`
 - Signature verification: `HMAC-SHA1(secret, raw_body + callbackURL)`, then Base64-compare with `X-Trello-Webhook`
 - Forward request timeout: 30 seconds
@@ -45,15 +45,16 @@ This project was built specifically to solve that integration gap.
 3. Forward to OpenClaw:
 - URL: `FORWARD_URL`
 - Header: `Authorization: Bearer <FORWARD_TOKEN>`
-- Body:
+- Body (message includes both readable summary and raw Trello payload):
 
 ```json
 {
-  "message": "...",
+  "message": "<human readable summary>\n\nRaw payload:\n<raw trello json>",
   "name": "Trello",
   "deliver": true,
   "channel": "telegram",
-  "to": "399076135"
+  "to": "399076135",
+  "model": "<your configured model>"
 }
 ```
 
@@ -83,13 +84,15 @@ Both CLI flags and environment variables are supported (CLI flags take precedenc
   - OpenClaw webhook endpoint (for example: `http://127.0.0.1:18789/hooks/agent`)
 - `--forward-token` / `FORWARD_TOKEN` (required)
   - OpenClaw Bearer token
+- `--model` / `MODEL` (required)
+  - Model passed to OpenClaw (for example: `copilot-api/claude-haiku-4.5`)
 
 ## Quick Start
 
 ### 1. Build
 
 ```bash
-go build -o trello-gateway ./cmd/trello-webhook-gateway
+go build -o trello-gateway ./cmd/trello-openclaw-webhook-gateway
 ```
 
 ### 2. Run with Environment Variables
@@ -100,6 +103,7 @@ export TRELLO_API_SECRET="your_trello_api_secret"
 export CALLBACK_URL="https://your-public-domain/"
 export FORWARD_URL="http://127.0.0.1:18789/hooks/agent"
 export FORWARD_TOKEN="your_openclaw_token"
+export MODEL="copilot-api/claude-haiku-4.5"
 
 ./trello-gateway
 ```
@@ -112,7 +116,8 @@ export FORWARD_TOKEN="your_openclaw_token"
   --trello-api-secret "your_trello_api_secret" \
   --callback-url "https://your-public-domain/" \
   --forward-url "http://127.0.0.1:18789/hooks/agent" \
-  --forward-token "your_openclaw_token"
+  --forward-token "your_openclaw_token" \
+  --model "copilot-api/claude-haiku-4.5"
 ```
 
 ## Development and Testing

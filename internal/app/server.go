@@ -17,7 +17,7 @@ func NewRouter(cfg Config, client *http.Client, logger *log.Logger) *gin.Engine 
 		c.Status(http.StatusMethodNotAllowed)
 	})
 
-	forwarder := NewForwarder(cfg.ForwardURL, cfg.ForwardToken, client)
+	forwarder := NewForwarder(cfg.ForwardURL, cfg.ForwardToken, cfg.Model, client)
 
 	r.HEAD("/", func(c *gin.Context) {
 		c.Status(http.StatusOK)
@@ -40,7 +40,7 @@ func NewRouter(cfg Config, client *http.Client, logger *log.Logger) *gin.Engine 
 		}
 
 		msg := BuildMessage(raw)
-		status, respBody, err := forwarder.Forward(c.Request.Context(), msg)
+		status, respBody, err := forwarder.Forward(c.Request.Context(), msg, raw)
 		if err != nil {
 			logger.Printf("forward failed: %v", err)
 			c.Status(http.StatusBadGateway)

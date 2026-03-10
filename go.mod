@@ -1,4 +1,4 @@
-module github.com/lonegunmanb/trello-webhook-local-gateway
+module github.com/lonegunmanb/trello-openclaw-webhook-gateway
 
 go 1.25.4
 

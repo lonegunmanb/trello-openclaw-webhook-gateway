@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lonegunmanb/trello-webhook-local-gateway/internal/app"
+	"github.com/lonegunmanb/trello-openclaw-webhook-gateway/internal/app"
 )
 
 func main() {

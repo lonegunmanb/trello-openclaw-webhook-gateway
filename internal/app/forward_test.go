@@ -19,8 +19,8 @@ func TestForwardSetsAuthorizationHeader(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: time.Second})
-	_, _, err := f.Forward(context.Background(), "hi")
+	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", &http.Client{Timeout: time.Second})
+	_, _, err := f.Forward(context.Background(), "hi", []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
 	}
@@ -37,8 +37,8 @@ func TestForwardContentTypeJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: time.Second})
-	_, _, err := f.Forward(context.Background(), "hi")
+	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", &http.Client{Timeout: time.Second})
+	_, _, err := f.Forward(context.Background(), "hi", []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
 	}
@@ -56,8 +56,8 @@ func TestForwardBodyShape(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: time.Second})
-	_, _, err := f.Forward(context.Background(), "hello")
+	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", &http.Client{Timeout: time.Second})
+	_, _, err := f.Forward(context.Background(), "hello", []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
 	}
@@ -66,8 +66,18 @@ func TestForwardBodyShape(t *testing.T) {
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if v["message"] != "hello" || v["name"] != "Trello" || v["deliver"] != true || v["channel"] != "telegram" || v["to"] != "399076135" {
+	if v["name"] != "Trello" || v["deliver"] != true || v["channel"] != "telegram" || v["to"] != "399076135" {
 		t.Fatalf("unexpected payload: %v", v)
+	}
+	msg, ok := v["message"].(string)
+	if !ok {
+		t.Fatalf("message must be string, got %T", v["message"])
+	}
+	if !strings.Contains(msg, "hello") || !strings.Contains(msg, "Raw payload:") || !strings.Contains(msg, `{"k":"v"}`) {
+		t.Fatalf("unexpected message content: %s", msg)
+	}
+	if v["model"] != "copilot-api/claude-haiku-4.5" {
+		t.Fatalf("unexpected model: %v", v["model"])
 	}
 }
 
@@ -78,8 +88,8 @@ func TestForwardPropagatesResponseStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: time.Second})
-	status, respBody, err := f.Forward(context.Background(), "hello")
+	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", &http.Client{Timeout: time.Second})
+	status, respBody, err := f.Forward(context.Background(), "hello", []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
 	}
@@ -98,8 +108,8 @@ func TestForwardTimeout(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewForwarder(srv.URL, "token", &http.Client{Timeout: 10 * time.Millisecond})
-	_, _, err := f.Forward(context.Background(), "hello")
+	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", &http.Client{Timeout: 10 * time.Millisecond})
+	_, _, err := f.Forward(context.Background(), "hello", []byte(`{"k":"v"}`))
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}

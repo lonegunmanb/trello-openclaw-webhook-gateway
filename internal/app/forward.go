@@ -12,20 +12,24 @@ import (
 type Forwarder struct {
 	forwardURL   string
 	forwardToken string
+	model        string
 	client       *http.Client
 }
 
-func NewForwarder(forwardURL, forwardToken string, client *http.Client) *Forwarder {
-	return &Forwarder{forwardURL: forwardURL, forwardToken: forwardToken, client: client}
+func NewForwarder(forwardURL, forwardToken, model string, client *http.Client) *Forwarder {
+	return &Forwarder{forwardURL: forwardURL, forwardToken: forwardToken, model: model, client: client}
 }
 
-func (f *Forwarder) Forward(ctx context.Context, message string) (int, []byte, error) {
+func (f *Forwarder) Forward(ctx context.Context, message string, rawBody []byte) (int, []byte, error) {
+	fullMessage := message + "\n\nRaw payload:\n" + string(rawBody)
+
 	payload := map[string]any{
-		"message": message,
+		"message": fullMessage,
 		"name":    "Trello",
 		"deliver": true,
 		"channel": "telegram",
 		"to":      "399076135",
+		"model":   f.model,
 	}
 
 	b, err := json.Marshal(payload)
