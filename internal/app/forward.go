@@ -70,6 +70,9 @@ func slimRawBody(rawBody []byte) ([]byte, error) {
 	if v, ok := nestedString(raw, "action", "data", "listBefore", "name"); ok {
 		listBefore["name"] = v
 	}
+	if v, ok := nestedString(raw, "action", "data", "listBefore", "id"); ok {
+		listBefore["id"] = v
+	}
 	if len(listBefore) > 0 {
 		data["listBefore"] = listBefore
 	}
@@ -77,6 +80,9 @@ func slimRawBody(rawBody []byte) ([]byte, error) {
 	listAfter := map[string]any{}
 	if v, ok := nestedString(raw, "action", "data", "listAfter", "name"); ok {
 		listAfter["name"] = v
+	}
+	if v, ok := nestedString(raw, "action", "data", "listAfter", "id"); ok {
+		listAfter["id"] = v
 	}
 	if len(listAfter) > 0 {
 		data["listAfter"] = listAfter

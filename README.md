@@ -59,7 +59,7 @@ Why this matters for Trello integration:
 - Read `X-Trello-Webhook`
 - Compute signature using `TRELLO_API_SECRET` + `CALLBACK_URL` and verify it
 - Return `403` if verification fails
-- If verification passes, forward the original Trello JSON body directly
+- If verification passes, forward a slimmed JSON payload
 
 3. Forward to OpenClaw:
 - URL: `FORWARD_URL`
@@ -68,7 +68,9 @@ Why this matters for Trello integration:
   - `action.type`
   - `action.data.card.id`
   - `action.data.listBefore.name`
+  - `action.data.listBefore.id`
   - `action.data.listAfter.name`
+  - `action.data.listAfter.id`
 
 Security note:
 
@@ -90,8 +92,8 @@ Example:
     "type": "updateCard",
     "data": {
       "card": { "id": "69ae188a" },
-      "listBefore": { "name": "Backlog" },
-      "listAfter": { "name": "Analyze" }
+      "listBefore": { "name": "Backlog", "id": "x" },
+      "listAfter": { "name": "Analyze", "id": "y" }
     }
   }
 }

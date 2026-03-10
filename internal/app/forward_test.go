@@ -108,16 +108,16 @@ func TestForwardBodySlimmed(t *testing.T) {
 	if !ok || listBefore["name"] != "Backlog" {
 		t.Fatalf("unexpected listBefore: %v", data["listBefore"])
 	}
-	if _, ok := listBefore["id"]; ok {
-		t.Fatalf("listBefore.id should be removed: %v", listBefore)
+	if listBefore["id"] != "x" {
+		t.Fatalf("listBefore.id should be preserved: %v", listBefore)
 	}
 
 	listAfter, ok := data["listAfter"].(map[string]any)
 	if !ok || listAfter["name"] != "Analyze" {
 		t.Fatalf("unexpected listAfter: %v", data["listAfter"])
 	}
-	if _, ok := listAfter["id"]; ok {
-		t.Fatalf("listAfter.id should be removed: %v", listAfter)
+	if listAfter["id"] != "y" {
+		t.Fatalf("listAfter.id should be preserved: %v", listAfter)
 	}
 	if _, ok := data["board"]; ok {
 		t.Fatalf("action.data.board should be removed: %v", data)
