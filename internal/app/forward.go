@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -24,6 +25,7 @@ func (f *Forwarder) Forward(ctx context.Context, rawBody []byte) (int, []byte, e
 	if err != nil {
 		return 0, nil, err
 	}
+	log.Printf("forward_slim_body=%s", string(slimBody))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.forwardURL, bytes.NewReader(slimBody))
 	if err != nil {
