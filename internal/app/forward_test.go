@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -73,7 +74,8 @@ func TestForwardBodyShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("message must be string, got %T", v["message"])
 	}
-	if !strings.Contains(msg, "hello") || !strings.Contains(msg, "Raw payload:") || !strings.Contains(msg, `{"k":"v"}`) {
+	encodedRaw := base64.StdEncoding.EncodeToString([]byte(`{"k":"v"}`))
+	if !strings.Contains(msg, "hello") || !strings.Contains(msg, "Raw payload (base64):") || !strings.Contains(msg, encodedRaw) {
 		t.Fatalf("unexpected message content: %s", msg)
 	}
 	if v["model"] != "copilot-api/claude-haiku-4.5" {

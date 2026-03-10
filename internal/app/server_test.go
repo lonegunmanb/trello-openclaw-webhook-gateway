@@ -139,7 +139,8 @@ func TestPostValidSignatureForwards(t *testing.T) {
 	if !ok {
 		t.Fatalf("message must be string, got %T", wrapped["message"])
 	}
-	if !strings.Contains(msg, "Raw payload:") || !strings.Contains(msg, `"type":"updateCard"`) {
+	encodedBody := base64.StdEncoding.EncodeToString(body)
+	if !strings.Contains(msg, "Raw payload (base64):") || !strings.Contains(msg, encodedBody) {
 		t.Fatalf("message missing raw payload section: %s", msg)
 	}
 }

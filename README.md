@@ -49,7 +49,7 @@ This project was built specifically to solve that integration gap.
 
 ```json
 {
-  "message": "<human readable summary>\n\nRaw payload:\n<raw trello json>",
+  "message": "<human readable summary>\n\nRaw payload (base64):\n<base64 trello json>",
   "name": "Trello",
   "deliver": true,
   "channel": "telegram",
@@ -59,6 +59,37 @@ This project was built specifically to solve that integration gap.
 ```
 
 4. Propagate OpenClaw's response status code back to Trello.
+
+## Forwarded Message Format
+
+The forwarded `message` field is a plain text block with two parts:
+
+1. Human-readable summary
+2. Base64-encoded original Trello payload
+
+Template:
+
+```text
+<summary from gateway>
+
+Raw payload (base64):
+<base64-encoded trello webhook json>
+```
+
+Example:
+
+```text
+Trello: card "My Card" moved from "Backlog" to "Analyze" (by Alice)
+
+Raw payload (base64):
+eyJhY3Rpb24iOnsidHlwZSI6InVwZGF0ZUNhcmQiLC4uLn19
+```
+
+To decode the raw JSON payload:
+
+```bash
+echo '<base64-encoded trello webhook json>' | base64 -d
+```
 
 ## Message Generation Rules
 

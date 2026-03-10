@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,7 +22,8 @@ func NewForwarder(forwardURL, forwardToken, model string, client *http.Client) *
 }
 
 func (f *Forwarder) Forward(ctx context.Context, message string, rawBody []byte) (int, []byte, error) {
-	fullMessage := message + "\n\nRaw payload:\n" + string(rawBody)
+	rawPayloadBase64 := base64.StdEncoding.EncodeToString(rawBody)
+	fullMessage := message + "\n\nRaw payload (base64):\n" + rawPayloadBase64
 
 	payload := map[string]any{
 		"message": fullMessage,
