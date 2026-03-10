@@ -19,6 +19,25 @@ That is why this gateway exists. It handles three responsibilities:
 
 This project was built specifically to solve that integration gap.
 
+## OpenClaw Webhook Behavior (Why This Gateway Exists)
+
+Based on OpenClaw's public webhook documentation and gateway config reference (`docs/automation/webhook.md` and `docs/gateway/configuration-reference.md` in `openclaw/openclaw`):
+
+- OpenClaw exposes hook endpoints under `/hooks` (default path), including:
+  - `POST /hooks/wake`
+  - `POST /hooks/agent`
+  - `POST /hooks/<name>` (mapping-based)
+- Hook requests require token authentication, typically:
+  - `Authorization: Bearer <token>` (recommended)
+  - `x-openclaw-token: <token>`
+- For `/hooks/agent`, the JSON payload requires a `message` field; optional fields include `name`, `agentId`, `sessionKey`, `deliver`, `channel`, `to`, `model`, and others.
+
+Why this matters for Trello integration:
+
+- Trello webhooks cannot set custom authorization headers.
+- OpenClaw hooks require authenticated requests and a `message` payload.
+- Therefore this gateway verifies Trello signatures, injects Bearer auth, and transforms Trello events into an OpenClaw-compatible `/hooks/agent` request.
+
 ## Core Design
 
 - Framework: `github.com/gin-gonic/gin`
@@ -64,12 +83,15 @@ This project was built specifically to solve that integration gap.
 
 The forwarded `message` field is a plain text block with two parts:
 
-1. Human-readable summary
-2. Base64-encoded original Trello payload
+1. Prompt header (configured by `--prompt` / `PROMPT`)
+2. Human-readable summary
+3. Base64-encoded original Trello payload
 
 Template:
 
 ```text
+<prompt header from config>
+
 <summary from gateway>
 
 Raw payload (base64):
@@ -79,6 +101,8 @@ Raw payload (base64):
 Example:
 
 ```text
+Please process the following Trello event according to C:\Users\<root>\.openclaw\workspace\trello-router.md:
+
 Trello: card "My Card" moved from "Backlog" to "Analyze" (by Alice)
 
 Raw payload (base64):
@@ -117,6 +141,8 @@ Both CLI flags and environment variables are supported (CLI flags take precedenc
   - OpenClaw Bearer token
 - `--model` / `MODEL` (required)
   - Model passed to OpenClaw (for example: `copilot-api/claude-haiku-4.5`)
+- `--prompt` / `PROMPT` (required)
+  - Prompt text injected at the top of each forwarded message
 
 ## Quick Start
 
@@ -135,6 +161,7 @@ export CALLBACK_URL="https://your-public-domain/"
 export FORWARD_URL="http://127.0.0.1:18789/hooks/agent"
 export FORWARD_TOKEN="your_openclaw_token"
 export MODEL="copilot-api/claude-haiku-4.5"
+export PROMPT="Please process the following Trello event according to C:\\Users\\<root>\\.openclaw\\workspace\\trello-router.md:"
 
 ./trello-gateway
 ```
@@ -148,7 +175,8 @@ export MODEL="copilot-api/claude-haiku-4.5"
   --callback-url "https://your-public-domain/" \
   --forward-url "http://127.0.0.1:18789/hooks/agent" \
   --forward-token "your_openclaw_token" \
-  --model "copilot-api/claude-haiku-4.5"
+  --model "copilot-api/claude-haiku-4.5" \
+  --prompt "Please process the following Trello event according to C:\\Users\\<root>\\.openclaw\\workspace\\trello-router.md:"
 ```
 
 ## Development and Testing

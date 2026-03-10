@@ -14,16 +14,17 @@ type Forwarder struct {
 	forwardURL   string
 	forwardToken string
 	model        string
+	prompt       string
 	client       *http.Client
 }
 
-func NewForwarder(forwardURL, forwardToken, model string, client *http.Client) *Forwarder {
-	return &Forwarder{forwardURL: forwardURL, forwardToken: forwardToken, model: model, client: client}
+func NewForwarder(forwardURL, forwardToken, model, prompt string, client *http.Client) *Forwarder {
+	return &Forwarder{forwardURL: forwardURL, forwardToken: forwardToken, model: model, prompt: prompt, client: client}
 }
 
 func (f *Forwarder) Forward(ctx context.Context, message string, rawBody []byte) (int, []byte, error) {
 	rawPayloadBase64 := base64.StdEncoding.EncodeToString(rawBody)
-	fullMessage := message + "\n\nRaw payload (base64):\n" + rawPayloadBase64
+	fullMessage := f.prompt + "\n\n" + message + "\n\nRaw payload (base64):\n" + rawPayloadBase64
 
 	payload := map[string]any{
 		"message": fullMessage,

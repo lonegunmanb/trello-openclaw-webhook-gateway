@@ -20,7 +20,7 @@ func TestForwardSetsAuthorizationHeader(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", &http.Client{Timeout: time.Second})
+	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", "Please process Trello events:", &http.Client{Timeout: time.Second})
 	_, _, err := f.Forward(context.Background(), "hi", []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
@@ -38,7 +38,7 @@ func TestForwardContentTypeJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", &http.Client{Timeout: time.Second})
+	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", "Please process Trello events:", &http.Client{Timeout: time.Second})
 	_, _, err := f.Forward(context.Background(), "hi", []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
@@ -57,7 +57,7 @@ func TestForwardBodyShape(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", &http.Client{Timeout: time.Second})
+	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", "Please process Trello events:", &http.Client{Timeout: time.Second})
 	_, _, err := f.Forward(context.Background(), "hello", []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
@@ -73,6 +73,9 @@ func TestForwardBodyShape(t *testing.T) {
 	msg, ok := v["message"].(string)
 	if !ok {
 		t.Fatalf("message must be string, got %T", v["message"])
+	}
+	if !strings.HasPrefix(msg, "Please process Trello events:\n\n") {
+		t.Fatalf("message should start with prompt, got: %s", msg)
 	}
 	encodedRaw := base64.StdEncoding.EncodeToString([]byte(`{"k":"v"}`))
 	if !strings.Contains(msg, "hello") || !strings.Contains(msg, "Raw payload (base64):") || !strings.Contains(msg, encodedRaw) {
@@ -90,7 +93,7 @@ func TestForwardPropagatesResponseStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", &http.Client{Timeout: time.Second})
+	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", "Please process Trello events:", &http.Client{Timeout: time.Second})
 	status, respBody, err := f.Forward(context.Background(), "hello", []byte(`{"k":"v"}`))
 	if err != nil {
 		t.Fatalf("forward: %v", err)
@@ -110,7 +113,7 @@ func TestForwardTimeout(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", &http.Client{Timeout: 10 * time.Millisecond})
+	f := NewForwarder(srv.URL, "token", "copilot-api/claude-haiku-4.5", "Please process Trello events:", &http.Client{Timeout: 10 * time.Millisecond})
 	_, _, err := f.Forward(context.Background(), "hello", []byte(`{"k":"v"}`))
 	if err == nil {
 		t.Fatal("expected timeout error")

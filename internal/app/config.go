@@ -14,6 +14,7 @@ type Config struct {
 	ForwardURL   string
 	ForwardToken string
 	Model        string
+	Prompt       string
 }
 
 func LoadConfig(args []string) (Config, error) {
@@ -24,6 +25,7 @@ func LoadConfig(args []string) (Config, error) {
 		ForwardURL:   os.Getenv("FORWARD_URL"),
 		ForwardToken: os.Getenv("FORWARD_TOKEN"),
 		Model:        os.Getenv("MODEL"),
+		Prompt:       os.Getenv("PROMPT"),
 	}
 
 	fs := flag.NewFlagSet("gateway", flag.ContinueOnError)
@@ -33,6 +35,7 @@ func LoadConfig(args []string) (Config, error) {
 	fs.StringVar(&cfg.ForwardURL, "forward-url", cfg.ForwardURL, "OpenClaw webhook URL")
 	fs.StringVar(&cfg.ForwardToken, "forward-token", cfg.ForwardToken, "OpenClaw bearer token")
 	fs.StringVar(&cfg.Model, "model", cfg.Model, "model for OpenClaw webhook processing")
+	fs.StringVar(&cfg.Prompt, "prompt", cfg.Prompt, "prompt prefix injected at the top of forwarded message")
 
 	if err := fs.Parse(args[1:]); err != nil {
 		return Config{}, err
@@ -61,6 +64,9 @@ func validateConfig(cfg Config) error {
 	if cfg.Model == "" {
 		return errors.New("missing model, set --model or MODEL")
 	}
+	if cfg.Prompt == "" {
+		return errors.New("missing prompt, set --prompt or PROMPT")
+	}
 	return nil
 }
 
@@ -73,7 +79,7 @@ func envOrDefault(key, fallback string) string {
 }
 
 func (c Config) Redacted() string {
-	return fmt.Sprintf("listen=%s callback_url=%s forward_url=%s trello_api_secret=%s forward_token=%s model=%s", c.ListenAddr, c.CallbackURL, c.ForwardURL, redact(c.TrelloSecret), redact(c.ForwardToken), c.Model)
+	return fmt.Sprintf("listen=%s callback_url=%s forward_url=%s trello_api_secret=%s forward_token=%s model=%s prompt=%s", c.ListenAddr, c.CallbackURL, c.ForwardURL, redact(c.TrelloSecret), redact(c.ForwardToken), c.Model, redact(c.Prompt))
 }
 
 func redact(v string) string {
