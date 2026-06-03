@@ -2,6 +2,7 @@ package router
 
 import (
 	"bytes"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -185,6 +186,134 @@ func TestRuleEngineMatchesCanonicalWorktypeCases(t *testing.T) {
 			}
 			if strings.Join(got.PromptNames, ",") != strings.Join(tc.wantPrompts, ",") {
 				t.Fatalf("PromptNames = %#v, want %#v", got.PromptNames, tc.wantPrompts)
+			}
+		})
+	}
+}
+
+func TestRuleEngineReturnsOptionalModel(t *testing.T) {
+	src := `
+rule "custom_model" {
+  when    = card.name == "custom"
+  model   = "claude-sonnet-4.5"
+  prompts = []
+}
+
+rule "fallback" {
+  when    = true
+  prompts = []
+}
+`
+	cfg, err := DecodeRuleConfig([]byte(src), "model.hcl", tempPlaybooksDir(t))
+	if err != nil {
+		t.Fatalf("DecodeRuleConfig: %v", err)
+	}
+	engine := NewRuleEngine(cfg, "", nil, sysevent.FromLogger(log.New(io.Discard, "", 0)))
+
+	got, ok := engine.Match(CardSignals{Name: "custom"})
+	if !ok {
+		t.Fatal("expected custom model rule to match")
+	}
+	if got.Model != "claude-sonnet-4.5" {
+		t.Fatalf("Model = %q, want %q", got.Model, "claude-sonnet-4.5")
+	}
+
+	got, ok = engine.Match(CardSignals{Name: "plain"})
+	if !ok {
+		t.Fatal("expected fallback rule to match")
+	}
+	if got.Model != "" {
+		t.Fatalf("fallback Model = %q, want empty", got.Model)
+	}
+}
+
+func TestRuleEngineReturnsOptionalProvider(t *testing.T) {
+	t.Setenv("TEST_RULE_BYOK_KEY", "resolved-test-key")
+	src := `
+rule "custom_provider" {
+  when  = card.name == "custom"
+  model = "gpt-5-mini"
+  provider {
+    type        = "openai"
+    base_url    = "https://example.com/v1"
+    api_key_ref = "TEST_RULE_BYOK_KEY"
+    wire_api    = "responses"
+  }
+  prompts = []
+}
+`
+	cfg, err := DecodeRuleConfig([]byte(src), "provider.hcl", tempPlaybooksDir(t))
+	if err != nil {
+		t.Fatalf("DecodeRuleConfig: %v", err)
+	}
+	engine := NewRuleEngine(cfg, "", nil, sysevent.FromLogger(log.New(io.Discard, "", 0)))
+
+	got, ok := engine.Match(CardSignals{Name: "custom"})
+	if !ok {
+		t.Fatal("expected provider rule to match")
+	}
+	if got.Provider == nil {
+		t.Fatal("expected provider to be populated")
+	}
+	if got.Provider.Type != "openai" || got.Provider.BaseURL != "https://example.com/v1" || got.Provider.APIKey != "resolved-test-key" || got.Provider.WireAPI != "responses" {
+		t.Fatalf("Provider = %+v, want resolved openai provider", got.Provider)
+	}
+}
+
+func TestDecodeRuleConfigProviderValidation(t *testing.T) {
+	t.Run("duplicate provider blocks", func(t *testing.T) {
+		src := `rule "bad" {
+  when = true
+  provider {
+    type = "openai"
+    base_url = "https://example.com"
+  }
+  provider {
+    type = "anthropic"
+    base_url = "https://example.org"
+  }
+  prompts = []
+}`
+		_, err := DecodeRuleConfig([]byte(src), "bad-provider.hcl", tempPlaybooksDir(t))
+		if err == nil || !strings.Contains(err.Error(), "at most one provider") {
+			t.Fatalf("DecodeRuleConfig error = %v, want containing %q", err, "at most one provider")
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{"aux without type base_url", `api_key_ref = "TEST_RULE_BYOK_KEY"`, "requires type and base_url"},
+		{"missing base_url", `type = "openai"`, "type and base_url must both be set"},
+		{"unsupported type", `type = "local"
+    base_url = "https://example.com"`, "unsupported provider type"},
+		{"api key conflict", `type = "openai"
+    base_url = "https://example.com"
+    api_key = "literal-test-key"
+    api_key_ref = "TEST_RULE_BYOK_KEY"`, "mutually exclusive"},
+		{"azure api version on openai", `type = "openai"
+    base_url = "https://example.com"
+    azure_api_version = "2024-10-21"`, "azure_api_version"},
+		{"unsupported wire api", `type = "openai"
+		base_url = "https://example.com"
+		wire_api = "streaming"`, "wire_api"},
+		{"missing api key ref", `type = "openai"
+    base_url = "https://example.com"
+    api_key_ref = "DEFINITELY_UNSET_RULE_BYOK_KEY"`, "api_key_ref"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := `rule "bad" {
+  when = true
+  provider {
+    ` + tc.body + `
+  }
+  prompts = []
+}`
+			_, err := DecodeRuleConfig([]byte(src), "bad-provider.hcl", tempPlaybooksDir(t))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("DecodeRuleConfig error = %v, want containing %q", err, tc.want)
 			}
 		})
 	}

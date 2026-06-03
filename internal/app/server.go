@@ -26,9 +26,9 @@ const MaxWebhookBodyBytes int64 = 1 << 20
 // on I/O) cannot leak forever under sustained webhook traffic.
 const MaxDispatchDuration = 30 * time.Minute
 
-// NewRouter wires up the gin router with the default CopilotRunner targeting
-// the model configured in cfg.CopilotModel. The returned router does not own
-// the runner's lifecycle; callers must Start/Stop it themselves.
+// NewRouter wires up the gin router with the supplied CopilotRunner. The
+// returned router does not own the runner's lifecycle; callers must Start/Stop
+// it themselves.
 //
 // dispatchCtx is the parent context for every background dispatch
 // goroutine the router spawns. main wires it to the gateway's shutdown
@@ -114,7 +114,7 @@ func NewRouterWithRunner(dispatchCtx context.Context, cfg Config, runner *Copilo
 		// dispatch goroutine inherits dispatchCtx (tied to gateway
 		// shutdown) and is further bounded by MaxDispatchDuration so a
 		// stuck dispatch cannot leak under sustained webhook traffic.
-		sysevent.Emitf(logger, "copilot_dispatch_start", "event_id=%s model=%s", eventID, runner.Model())
+		sysevent.Emitf(logger, "copilot_dispatch_start", "event_id=%s default_model=%s", eventID, runner.Model())
 		c.Status(http.StatusAccepted)
 
 		go func(eventID string, raw []byte) {

@@ -104,7 +104,7 @@ Both CLI flags and environment variables are supported. CLI flags take precedenc
 | `--trello-api-token` | `TRELLO_API_TOKEN` | | **yes** | Trello API token. See above. |
 | `--callback-url` | `CALLBACK_URL` | | only with `--tunnel=none` | Public webhook callback URL registered in Trello. Must exactly match the URL Trello signs. Rejected with the default auto-tunnel path. |
 | `--tunnel` | `TRELLO_GATEWAY_TUNNEL` | `cloudflared` | | Tunnel provider. `cloudflared` starts a TryCloudflare quick tunnel, waits for its public URL, reconciles the Trello board webhook, and uses that URL for signature verification. `none` disables auto-tunnel/webhook management and requires `--callback-url`. |
-| `--copilot-model` | `COPILOT_MODEL` | `claude-opus-4.6-1m` | | Copilot model name used for worker sessions. |
+| `--copilot-model` | `COPILOT_MODEL` | `claude-opus-4.6-1m` | | Default Copilot model name used for worker sessions; individual `rule {}` blocks in `router.hcl` may override it with `model = "..."` and may attach a BYOK `provider {}` block. |
 | `--work-dir-base` | `JJC_WORK_DIR_BASE` | `C:\project` on Windows; `/var/lib/jjc/work` elsewhere | | Absolute parent directory for per-card work_dir directories. JJC creates it at startup if it does not already exist. |
 | `--config-src` | `JJC_CONFIG_SRC` | | **yes** | Source of the JJC configuration bundle: a single directory (or any [hashicorp/go-getter v2](https://github.com/hashicorp/go-getter/tree/v2) URL such as `git::https://...`, `https://...`, `github.com/owner/repo`) that holds **both** `router.hcl` and every playbook `.md` file at the top level. Local directories are used in place. Remote sources are downloaded into a per-process temp directory at startup and removed on shutdown. |
 | `--kanban-board-id` | `TRELLO_KANBAN_BOARD_ID` | | **yes** | Trello board id (24-hex string from the board URL). The `kanban {}` block in `router.hcl` is resolved against this board's lists at startup. |
@@ -245,6 +245,7 @@ Routing is centered on Trello card IDs and the **resolved kanban view** produced
 
 - Moves into a `plan` or `action` role list (`Analyze`, `In action`) dispatch to a worker.
 - Human comments dispatch to a worker.
+- The matched `rule {}` can override the worker model with `model = "..."`; adding a `provider {}` block routes that model through a custom BYOK provider (`openai`, `azure`, or `anthropic`). Prefer `api_key_ref = "ENV_VAR"` so secrets stay out of `router.hcl`.
 - Agent comments whose trimmed text starts with any prefix in `kanban.agent_comment_prefixes` (default: `["[agent]:"]`) are dropped to avoid feedback loops.
 - Moves to a `done` role list (`Done`) and card deletion terminate an existing worker.
 - Moves to a `wait` role list (`Ready for plan review`, `Ready for review`, `Pending PR`, `Need Attention`) — **including any Trello list that no role claimed** — notify an existing worker to wind down; if no worker exists the event is dropped.

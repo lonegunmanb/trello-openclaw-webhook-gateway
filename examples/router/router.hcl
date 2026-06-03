@@ -299,6 +299,25 @@ route "unsupported_action_type" {
 # strcontains / regex / trimspace / contains / anytrue / alltrue / try / can /
 # coalesce / ... see github.com/lonegunmanb/hclfuncs.
 #
+# Optional attributes:
+#   model string — Copilot model ID for worker sessions spawned from this
+#                  matched rule. Omit it to use --copilot-model / COPILOT_MODEL.
+#
+# Optional nested block:
+#   provider { ... } — BYOK provider for workers spawned from this matched rule.
+#                      When present, `model` is forwarded as-is to that provider
+#                      instead of being treated as a Copilot-hosted model ID.
+#
+#   provider {
+#     type        = "openai"                  # openai | azure | anthropic
+#     base_url    = "https://api.openai.com/v1"
+#     api_key_ref = "OPENAI_API_KEY"          # preferred: resolved at startup
+#     # api_key      = "literal-test-key"     # supported, but avoid in shared files
+#     # bearer_token = "..."                  # Authorization: Bearer <token>
+#     wire_api    = "responses"              # openai/azure: completions | responses
+#     # azure_api_version = "2024-10-21"     # only when type = "azure"
+#   }
+#
 # Match semantics: top-down, first when==true wins. After a match, every name
 # in `prompts` is resolved against the config-src directory (`--config-src`,
 # the only location the engine reads .md files from), goes through the same

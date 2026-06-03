@@ -95,7 +95,7 @@ func loadConfigWithOutput(args []string, helpOutput io.Writer) (Config, error) {
 	fs.StringVar(&cfg.TrelloAPIToken, "trello-api-token", "", "Trello API token, used by the Go SDK to talk to api.trello.com (also TRELLO_API_TOKEN; never printed in --help)")
 	fs.StringVar(&cfg.CallbackURL, "callback-url", cfg.CallbackURL, "webhook callback URL used for signature verification")
 	fs.StringVar(&cfg.Tunnel, "tunnel", cfg.Tunnel, "tunnel provider: cloudflared or none")
-	fs.StringVar(&cfg.CopilotModel, "copilot-model", cfg.CopilotModel, "Copilot model to use for the agent session")
+	fs.StringVar(&cfg.CopilotModel, "copilot-model", cfg.CopilotModel, "Default Copilot model to use for worker sessions; rule blocks may override it")
 	fs.StringVar(&cfg.ConfigSrc, "config-src", cfg.ConfigSrc, "local directory or hashicorp/go-getter v2 source containing router.hcl and every playbook .md file (also JJC_CONFIG_SRC); remote sources are downloaded to a per-process temp dir at startup and removed on shutdown")
 	fs.StringVar(&cfg.WorkDirBase, "work-dir-base", cfg.WorkDirBase, "absolute parent directory for per-card work_dir directories (also JJC_WORK_DIR_BASE)")
 	fs.StringVar(&cfg.KanbanBoardID, "kanban-board-id", cfg.KanbanBoardID, "Trello board id whose lists the kanban {} block in router.hcl is resolved against")

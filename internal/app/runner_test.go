@@ -13,6 +13,7 @@ import (
 
 	"github.com/lonegunmanb/jjc/internal/app/kanban"
 	"github.com/lonegunmanb/jjc/internal/app/prompttmpl"
+	"github.com/lonegunmanb/jjc/internal/app/router"
 	"github.com/lonegunmanb/jjc/internal/app/sysevent"
 )
 
@@ -71,6 +72,78 @@ func TestNewWorkerSessionWithoutClientReturnsError(t *testing.T) {
 		t.Fatal("expected error when client is not started")
 	} else if !strings.Contains(err.Error(), "client not started") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWorkerSessionModelUsesRuleOverrideWhenPresent(t *testing.T) {
+	r := NewCopilotRunner("runner-model", sysevent.Default())
+	if got := r.modelForWorker(workerBootstrap{}); got != "runner-model" {
+		t.Fatalf("modelForWorker without override = %q, want runner-model", got)
+	}
+	if got := r.modelForWorker(workerBootstrap{model: "rule-model"}); got != "rule-model" {
+		t.Fatalf("modelForWorker with override = %q, want rule-model", got)
+	}
+}
+
+func TestWorkerSessionProviderUsesRuleOverrideWhenPresent(t *testing.T) {
+	r := NewCopilotRunner("runner-model", sysevent.Default())
+	if got := r.providerForWorker(workerBootstrap{}); got != nil {
+		t.Fatalf("providerForWorker without override = %+v, want nil", got)
+	}
+
+	got := r.providerForWorker(workerBootstrap{provider: &router.ProviderConfig{
+		Type:            "azure",
+		BaseURL:         "https://example.openai.azure.com",
+		APIKey:          "resolved-test-key",
+		BearerToken:     "bearer-test-token",
+		WireAPI:         "responses",
+		AzureAPIVersion: "2024-10-21",
+	}})
+	if got == nil {
+		t.Fatal("expected SDK provider")
+	}
+	if got.Type != "azure" || got.BaseURL != "https://example.openai.azure.com" || got.APIKey != "resolved-test-key" || got.BearerToken != "bearer-test-token" || got.WireApi != "responses" {
+		t.Fatalf("Provider = %+v, want mapped SDK provider", got)
+	}
+	if got.Azure == nil || got.Azure.APIVersion != "2024-10-21" {
+		t.Fatalf("Azure = %+v, want API version", got.Azure)
+	}
+}
+
+func TestClassifyForWorkerCarriesRuleModel(t *testing.T) {
+	t.Setenv("TEST_CLASSIFY_BYOK_KEY", "resolved-classify-key")
+	playbooksDir := t.TempDir()
+	src := `
+rule "custom_model" {
+  when    = card.name == "custom"
+  model   = "rule-model"
+	provider {
+		type        = "openai"
+		base_url    = "https://example.com/v1"
+		api_key_ref = "TEST_CLASSIFY_BYOK_KEY"
+	}
+  prompts = []
+}
+`
+	cfg, err := router.DecodeRuleConfig([]byte(src), "rules.hcl", playbooksDir)
+	if err != nil {
+		t.Fatalf("DecodeRuleConfig: %v", err)
+	}
+	r := NewCopilotRunner("runner-model", sysevent.Default())
+	r.SetRuleEngine(router.NewRuleEngine(cfg, "", nil, sysevent.Default()))
+	r.SetCardSignalsFetcher(func(context.Context, string) (router.CardSignals, error) {
+		return router.CardSignals{ID: "card-1", Name: "custom"}, nil
+	})
+
+	got := r.classifyForWorker(context.Background(), "card-1")
+	if got.model != "rule-model" {
+		t.Fatalf("worker bootstrap model = %q, want rule-model", got.model)
+	}
+	if got.provider == nil {
+		t.Fatal("worker bootstrap provider is nil, want rule provider")
+	}
+	if got.provider.Type != "openai" || got.provider.BaseURL != "https://example.com/v1" || got.provider.APIKey != "resolved-classify-key" {
+		t.Fatalf("worker bootstrap provider = %+v, want resolved rule provider", got.provider)
 	}
 }
 

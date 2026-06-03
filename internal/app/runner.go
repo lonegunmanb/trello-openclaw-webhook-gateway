@@ -455,11 +455,13 @@ func (r *CopilotRunner) NewWorkerSession(ctx context.Context, cardID string, tra
 		tracker.SetWorkDir(workDir)
 	}
 	systemPrompt := assembleWorkerSystemPrompt(cardID, bs, r.playbooks, r.kanbanView)
+	workerModel := r.modelForWorker(bs)
 	sysevent.Emitf(r.logger, "worker_session_create_attempt", "card_id=%s model=%s system_bytes=%d",
-		cardID, r.model, len(systemPrompt))
+		cardID, workerModel, len(systemPrompt))
 
 	cfg := &copilot.SessionConfig{
-		Model:               r.model,
+		Model:               workerModel,
+		Provider:            r.providerForWorker(bs),
 		WorkingDirectory:    workDir,
 		OnPermissionRequest: approveAllUserIntent, // see permissions.go
 		// Hooks layer also gates tool calls (PreToolUse) — return "allow"
@@ -587,6 +589,8 @@ func (r *CopilotRunner) classifyForWorker(ctx context.Context, cardID string) wo
 	}
 	bs.classification.RuleName = match.RuleName
 	bs.ruleName = match.RuleName
+	bs.model = match.Model
+	bs.provider = cloneRouterProvider(match.Provider)
 	bs.promptNames = append([]string(nil), match.PromptNames...)
 	sysevent.Emitf(r.logger, "worker_bootstrap_rule_matched", "card_id=%s rule=%s prompt_count=%d kind=%s owner=%s repo=%s number=%s text_bytes=%d",
 		cardID, match.RuleName, len(match.PromptNames), bs.classification.GitHub.ItemKind,
@@ -651,8 +655,42 @@ type workerBootstrap struct {
 	signals        router.CardSignals
 	classification CardClassification
 	ruleName       string
+	model          string
+	provider       *router.ProviderConfig
 	promptNames    []string
 	playbooks      []workerPlaybook
+}
+
+func (r *CopilotRunner) modelForWorker(bs workerBootstrap) string {
+	if bs.model != "" {
+		return bs.model
+	}
+	return r.model
+}
+
+func (r *CopilotRunner) providerForWorker(bs workerBootstrap) *copilot.ProviderConfig {
+	if bs.provider == nil || !bs.provider.IsEnabled() {
+		return nil
+	}
+	provider := &copilot.ProviderConfig{
+		Type:        bs.provider.Type,
+		BaseURL:     bs.provider.BaseURL,
+		APIKey:      bs.provider.APIKey,
+		BearerToken: bs.provider.BearerToken,
+		WireApi:     bs.provider.WireAPI,
+	}
+	if bs.provider.AzureAPIVersion != "" {
+		provider.Azure = &copilot.AzureProviderOptions{APIVersion: bs.provider.AzureAPIVersion}
+	}
+	return provider
+}
+
+func cloneRouterProvider(provider *router.ProviderConfig) *router.ProviderConfig {
+	if provider == nil {
+		return nil
+	}
+	cloned := *provider
+	return &cloned
 }
 
 type workerPlaybook struct {

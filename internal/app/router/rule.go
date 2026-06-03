@@ -25,9 +25,12 @@ type RuleConfig struct {
 
 // RuleBlock is one declarative `rule "<name>" {}` block.
 type RuleBlock struct {
-	Name    string         `hcl:"name,label"`
-	When    hcl.Expression `hcl:"when"`
-	Prompts []string       `hcl:"prompts"`
+	Name           string           `hcl:"name,label"`
+	When           hcl.Expression   `hcl:"when"`
+	Model          string           `hcl:"model,optional"`
+	ProviderBlocks []ProviderConfig `hcl:"provider,block"`
+	Prompts        []string         `hcl:"prompts"`
+	Provider       *ProviderConfig
 
 	DeclRange hcl.Range
 }
@@ -44,6 +47,8 @@ type CardSignals struct {
 // RuleMatch is the structured result of evaluating rule blocks.
 type RuleMatch struct {
 	RuleName    string
+	Model       string
+	Provider    *ProviderConfig
 	PromptNames []string
 }
 
@@ -106,6 +111,24 @@ func DecodeRuleConfig(src []byte, filename, playbooksDir string) (RuleConfig, er
 				r.Name, b.DefRange, prev)
 		}
 		seen[r.Name] = b.DefRange
+		r.Model = strings.TrimSpace(r.Model)
+		if len(r.ProviderBlocks) > 1 {
+			return RuleConfig{}, fmt.Errorf("router: rule %q at %s has at most one provider block", r.Name, b.DefRange)
+		}
+		if len(r.ProviderBlocks) == 1 {
+			provider := r.ProviderBlocks[0]
+			provider.normalize()
+			if err := provider.validate(); err != nil {
+				return RuleConfig{}, fmt.Errorf("router: rule %q at %s has invalid provider: %w", r.Name, b.DefRange, err)
+			}
+			if provider.IsEnabled() {
+				if err := provider.resolveAPIKey(os.LookupEnv); err != nil {
+					return RuleConfig{}, fmt.Errorf("router: rule %q at %s has invalid provider: %w", r.Name, b.DefRange, err)
+				}
+				r.Provider = &provider
+			}
+		}
+		r.ProviderBlocks = nil
 		if len(r.Prompts) > 0 && playbooksDir == "" {
 			return RuleConfig{}, fmt.Errorf("router: rule %q prompts cannot be validated: playbooks dir is empty",
 				r.Name)
@@ -175,6 +198,8 @@ func (e *RuleEngine) Match(card CardSignals) (RuleMatch, bool) {
 		if v.True() {
 			return RuleMatch{
 				RuleName:    r.Name,
+				Model:       r.Model,
+				Provider:    cloneProvider(r.Provider),
 				PromptNames: append([]string(nil), r.Prompts...),
 			}, true
 		}

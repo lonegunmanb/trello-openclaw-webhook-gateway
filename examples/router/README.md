@@ -164,9 +164,13 @@ It introduces three blocks:
    dispatched, sent as a departure notice, or treated as a terminate
    signal.
 3. `rule {}` — given a matched card, picks which playbook(s) to feed to the worker.
-   Playbook names are bare basenames (same convention as `{{...}}`
-   above) and the engine resolves them through the `<config-src>`
-   renderer described in the previous section.
+   A rule may also set `model = "..."` to override the process default
+   model for workers spawned from that match. To route that model through
+   BYOK, add one `provider {}` block with `type`, `base_url`, and either
+   `api_key_ref` (preferred; resolved from the environment at startup) or
+   another supported SDK credential field. Playbook names are bare basenames
+   (same convention as `{{...}}` above) and the engine resolves them through
+   the `<config-src>` renderer described in the previous section.
 
 ### Tracking issues
 
