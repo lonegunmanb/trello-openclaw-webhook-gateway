@@ -38,3 +38,14 @@ func TestVerifySignatureMissingHeader(t *testing.T) {
 		t.Fatal("expected invalid signature when header missing")
 	}
 }
+
+func TestVerifySignatureRejectsEmptySecretOrCallback(t *testing.T) {
+	raw := []byte(`{"hello":"world"}`)
+	callbackURL := "https://example.com/trello"
+	if VerifySignature("", raw, callbackURL, sign("", raw, callbackURL)) {
+		t.Fatal("expected invalid signature when secret is empty")
+	}
+	if VerifySignature("secret", raw, "", sign("secret", raw, "")) {
+		t.Fatal("expected invalid signature when callback URL is empty")
+	}
+}

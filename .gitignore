@@ -31,6 +31,8 @@ playbook/*
 # Gateway runtime artifacts
 *.log
 tmp/
+.jjc/
+workspace/
 
 # Editor/IDE
 # .idea/

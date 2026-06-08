@@ -8,11 +8,22 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lonegunmanb/jjc/internal/app/localboard"
 	"github.com/lonegunmanb/jjc/internal/app/sysevent"
 	"github.com/lonegunmanb/jjc/internal/app/tunnel"
 )
 
+const (
+	BoardBackendTrello = "trello"
+	BoardBackendLocal  = "local"
+)
+
 type Config struct {
+	// BoardBackend selects the human-facing kanban surface. The default
+	// remains Trello for backward compatibility; local starts the built-in
+	// SQLite-backed loopback board and feeds Trello-shaped events into the
+	// existing runner/dispatcher path.
+	BoardBackend string
 	ListenAddr   string
 	TrelloSecret string
 	// TrelloAPIKey / TrelloAPIToken authenticate every outbound Trello
@@ -50,6 +61,13 @@ type Config struct {
 	// LogFile is the operator log destination. Defaults to the historical
 	// trellooperator.log name for backward compatibility.
 	LogFile string
+	// LocalBoardListen is the loopback listen address for the built-in
+	// Trello-free board UI/API when --board-backend=local.
+	LocalBoardListen string
+	// LocalBoardDBPath is the SQLite database path for the local board.
+	// The default is <workspace>/.jjc/local-board.sqlite, where workspace
+	// is the process working directory at startup.
+	LocalBoardDBPath string
 }
 
 func LoadConfig(args []string) (Config, error) {
@@ -72,20 +90,24 @@ func loadConfigWithOutput(args []string, helpOutput io.Writer) (Config, error) {
 	// did not pass the matching --flag on the command line. Precedence
 	// is unchanged: CLI > env > (required, no built-in default).
 	cfg := Config{
-		ListenAddr:    envOrDefault("LISTEN_ADDR", ":18790"),
-		CallbackURL:   os.Getenv("CALLBACK_URL"),
-		Tunnel:        envOrDefault("TRELLO_GATEWAY_TUNNEL", tunnel.Cloudflared),
-		CopilotModel:  envOrDefault("COPILOT_MODEL", DefaultCopilotModel),
-		ConfigSrc:     os.Getenv("JJC_CONFIG_SRC"),
-		WorkDirBase:   envOrDefault("JJC_WORK_DIR_BASE", defaultWorkDirBase()),
-		KanbanBoardID: os.Getenv("TRELLO_KANBAN_BOARD_ID"),
-		LogFile:       envOrDefault("LOG_FILE", sysevent.DefaultLogFileName),
+		BoardBackend:     envOrDefault("JJC_BOARD_BACKEND", BoardBackendTrello),
+		ListenAddr:       envOrDefault("LISTEN_ADDR", ":18790"),
+		CallbackURL:      os.Getenv("CALLBACK_URL"),
+		Tunnel:           envOrDefault("TRELLO_GATEWAY_TUNNEL", tunnel.Cloudflared),
+		CopilotModel:     envOrDefault("COPILOT_MODEL", DefaultCopilotModel),
+		ConfigSrc:        os.Getenv("JJC_CONFIG_SRC"),
+		WorkDirBase:      envOrDefault("JJC_WORK_DIR_BASE", defaultWorkDirBase()),
+		KanbanBoardID:    os.Getenv("TRELLO_KANBAN_BOARD_ID"),
+		LogFile:          envOrDefault("LOG_FILE", sysevent.DefaultLogFileName),
+		LocalBoardListen: envOrDefault("JJC_LOCAL_BOARD_LISTEN", "127.0.0.1:18791"),
+		LocalBoardDBPath: envOrDefault("JJC_LOCAL_BOARD_DB", defaultLocalBoardDBPath()),
 	}
 
 	fs := flag.NewFlagSet("gateway", flag.ContinueOnError)
 	if helpOutput != nil {
 		fs.SetOutput(helpOutput)
 	}
+	fs.StringVar(&cfg.BoardBackend, "board-backend", cfg.BoardBackend, "board backend: trello or local (also JJC_BOARD_BACKEND)")
 	fs.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "listen address")
 	// Register the three secret flags with an empty default so the
 	// help text never echoes the env-derived value (see the comment
@@ -100,6 +122,8 @@ func loadConfigWithOutput(args []string, helpOutput io.Writer) (Config, error) {
 	fs.StringVar(&cfg.WorkDirBase, "work-dir-base", cfg.WorkDirBase, "absolute parent directory for per-card work_dir directories (also JJC_WORK_DIR_BASE)")
 	fs.StringVar(&cfg.KanbanBoardID, "kanban-board-id", cfg.KanbanBoardID, "Trello board id whose lists the kanban {} block in router.hcl is resolved against")
 	fs.StringVar(&cfg.LogFile, "log-file", cfg.LogFile, "operator log file path")
+	fs.StringVar(&cfg.LocalBoardListen, "local-board-listen", cfg.LocalBoardListen, "loopback listen address for the built-in local board UI/API (also JJC_LOCAL_BOARD_LISTEN)")
+	fs.StringVar(&cfg.LocalBoardDBPath, "local-board-db", cfg.LocalBoardDBPath, "SQLite database path for the built-in local board (also JJC_LOCAL_BOARD_DB)")
 
 	if err := fs.Parse(args[1:]); err != nil {
 		return Config{}, err
@@ -115,6 +139,12 @@ func loadConfigWithOutput(args []string, helpOutput io.Writer) (Config, error) {
 
 	if cfg.Tunnel == "" {
 		cfg.Tunnel = tunnel.Cloudflared
+	}
+	if cfg.BoardBackend == BoardBackendLocal {
+		cfg.Tunnel = tunnel.None
+		if cfg.KanbanBoardID == "" {
+			cfg.KanbanBoardID = localboard.DefaultBoardID
+		}
 	}
 
 	if err := validateConfig(cfg); err != nil {
@@ -144,26 +174,38 @@ func overlaySecretFromEnv(fs *flag.FlagSet, dst *string, flagName, envName strin
 }
 
 func validateConfig(cfg Config) error {
-	if cfg.TrelloSecret == "" {
-		return errors.New("missing trello secret, set --trello-api-secret or TRELLO_API_SECRET")
-	}
-	if cfg.TrelloAPIKey == "" {
-		return errors.New("missing trello api key, set --trello-api-key or TRELLO_API_KEY")
-	}
-	if cfg.TrelloAPIToken == "" {
-		return errors.New("missing trello api token, set --trello-api-token or TRELLO_API_TOKEN")
-	}
-	switch cfg.Tunnel {
-	case tunnel.Cloudflared:
-		if cfg.CallbackURL != "" {
-			return errors.New("--callback-url/CALLBACK_URL is mutually exclusive with --tunnel=cloudflared; use --tunnel=none to manage the callback URL manually")
+	switch cfg.BoardBackend {
+	case BoardBackendTrello:
+		if cfg.TrelloSecret == "" {
+			return errors.New("missing trello secret, set --trello-api-secret or TRELLO_API_SECRET")
 		}
-	case tunnel.None:
-		if cfg.CallbackURL == "" {
-			return errors.New("missing callback URL, set --callback-url or CALLBACK_URL when --tunnel=none")
+		if cfg.TrelloAPIKey == "" {
+			return errors.New("missing trello api key, set --trello-api-key or TRELLO_API_KEY")
+		}
+		if cfg.TrelloAPIToken == "" {
+			return errors.New("missing trello api token, set --trello-api-token or TRELLO_API_TOKEN")
+		}
+		switch cfg.Tunnel {
+		case tunnel.Cloudflared:
+			if cfg.CallbackURL != "" {
+				return errors.New("--callback-url/CALLBACK_URL is mutually exclusive with --tunnel=cloudflared; use --tunnel=none to manage the callback URL manually")
+			}
+		case tunnel.None:
+			if cfg.CallbackURL == "" {
+				return errors.New("missing callback URL, set --callback-url or CALLBACK_URL when --tunnel=none")
+			}
+		default:
+			return fmt.Errorf("unknown tunnel provider %q (valid: %s, %s)", cfg.Tunnel, tunnel.Cloudflared, tunnel.None)
+		}
+	case BoardBackendLocal:
+		if cfg.LocalBoardListen == "" {
+			return errors.New("missing local board listen address, set --local-board-listen or JJC_LOCAL_BOARD_LISTEN")
+		}
+		if cfg.LocalBoardDBPath == "" {
+			return errors.New("missing local board db path, set --local-board-db or JJC_LOCAL_BOARD_DB")
 		}
 	default:
-		return fmt.Errorf("unknown tunnel provider %q (valid: %s, %s)", cfg.Tunnel, tunnel.Cloudflared, tunnel.None)
+		return fmt.Errorf("unknown board backend %q (valid: %s, %s)", cfg.BoardBackend, BoardBackendTrello, BoardBackendLocal)
 	}
 	if cfg.CopilotModel == "" {
 		return errors.New("missing copilot model, set --copilot-model or COPILOT_MODEL")
@@ -198,6 +240,14 @@ func envOrDefault(key, fallback string) string {
 	return v
 }
 
+func defaultLocalBoardDBPath() string {
+	wd, err := os.Getwd()
+	if err != nil || wd == "" {
+		return filepath.Join(".jjc", "local-board.sqlite")
+	}
+	return filepath.Join(wd, ".jjc", "local-board.sqlite")
+}
+
 func EnsureWorkDirBase(dir string) error {
 	if dir == "" {
 		return errors.New("work dir base is empty")
@@ -212,8 +262,8 @@ func EnsureWorkDirBase(dir string) error {
 }
 
 func (c Config) Redacted() string {
-	return fmt.Sprintf("listen=%s callback_url=%s tunnel=%s copilot_model=%s config_src=%s work_dir_base=%s kanban_board_id=%s log_file=%s trello_api_secret=%s trello_api_key=%s trello_api_token=%s",
-		c.ListenAddr, c.CallbackURL, c.Tunnel, c.CopilotModel, c.ConfigSrc, c.WorkDirBase, c.KanbanBoardID, c.LogFile,
+	return fmt.Sprintf("board_backend=%s listen=%s callback_url=%s tunnel=%s copilot_model=%s config_src=%s work_dir_base=%s kanban_board_id=%s log_file=%s local_board_listen=%s local_board_db=%s trello_api_secret=%s trello_api_key=%s trello_api_token=%s",
+		c.BoardBackend, c.ListenAddr, c.CallbackURL, c.Tunnel, c.CopilotModel, c.ConfigSrc, c.WorkDirBase, c.KanbanBoardID, c.LogFile, c.LocalBoardListen, c.LocalBoardDBPath,
 		redact(c.TrelloSecret), redact(c.TrelloAPIKey), redact(c.TrelloAPIToken))
 }
 

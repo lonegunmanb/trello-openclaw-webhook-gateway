@@ -22,13 +22,13 @@ const (
 )
 
 type tuiLayout struct {
-	Width       int
-	Height      int
-	BodyHeight  int
-	MainHeight  int
-	EventsHeight int
-	WideMain    bool
-	WorkersWidth int
+	Width         int
+	Height        int
+	BodyHeight    int
+	MainHeight    int
+	EventsHeight  int
+	WideMain      bool
+	WorkersWidth  int
 	ActivityWidth int
 }
 
@@ -112,10 +112,10 @@ type tuiModel struct {
 
 	globalEvents []GlobalEvent
 
-	focus      tuiFocus
-	width      int
-	height     int
-	statusMsg  string    // transient message (e.g. dump result), shown in footer
+	focus       tuiFocus
+	width       int
+	height      int
+	statusMsg   string    // transient message (e.g. dump result), shown in footer
 	statusUntil time.Time // when statusMsg should disappear
 
 	// confirmDelete drives the modal confirmation overlay shown after the
@@ -607,10 +607,10 @@ func tuiStyledKind(kind string) string {
 
 func tuiKindLabel(kind string) string {
 	label := kind
-	switch {
-	case kind == "assistant_message" || kind == "assistant":
+	switch kind {
+	case "assistant_message", "assistant":
 		label = "assistant"
-	case kind == "user_message":
+	case "user_message":
 		label = "user_msg"
 	}
 	return fmt.Sprintf("%-16s", label)

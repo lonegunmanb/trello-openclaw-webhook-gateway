@@ -20,6 +20,7 @@ import (
 	"github.com/lonegunmanb/jjc/internal/app"
 	"github.com/lonegunmanb/jjc/internal/app/aiassistedrefresh"
 	"github.com/lonegunmanb/jjc/internal/app/kanban"
+	"github.com/lonegunmanb/jjc/internal/app/localboard"
 	"github.com/lonegunmanb/jjc/internal/app/prompts"
 	"github.com/lonegunmanb/jjc/internal/app/prompttmpl"
 	"github.com/lonegunmanb/jjc/internal/app/router"
@@ -87,16 +88,35 @@ func main() {
 	defer configCleanup()
 	runner.SetConfigDir(configDir)
 
-	// Build the SDK-backed Trello client once at startup. Both the
-	// CardInfoFetcher (used to derive work_type from a card description)
-	// and the per-session `trello_*` tools share this client — no more
-	// pwsh.exe shell-out for any Trello traffic.
-	trelloClient, terr := trelloclient.New(
-		trelloclient.WithCredentials(cfg.TrelloAPIKey, cfg.TrelloAPIToken),
-		trelloclient.WithLogger(logger),
-	)
-	if terr != nil {
-		emitAndExit(logger, "trelloclient_init_failed", "err=%v", terr)
+	// Build the board client once at startup. In the historical Trello
+	// mode this is the SDK-backed Trello wrapper. In local mode it is the
+	// SQLite-backed built-in board, but it deliberately implements the
+	// same trelloclient.Client surface so the runner, rule engine inputs,
+	// and existing `trello_*` worker tools stay unchanged.
+	var trelloClient trelloclient.Client
+	var localStore *localboard.Store
+	if cfg.BoardBackend == app.BoardBackendLocal {
+		var lerr error
+		localStore, lerr = localboard.Open(context.Background(), localboard.Options{DBPath: cfg.LocalBoardDBPath})
+		if lerr != nil {
+			emitAndExit(logger, "localboard_init_failed", "db=%s err=%v", cfg.LocalBoardDBPath, lerr)
+		}
+		defer func() {
+			if err := localStore.Close(); err != nil {
+				sysevent.Emitf(logger, "localboard_close_failed", "err=%v", err)
+			}
+		}()
+		trelloClient = localStore
+		sysevent.Emitf(logger, "localboard_ready", "db=%s", cfg.LocalBoardDBPath)
+	} else {
+		var terr error
+		trelloClient, terr = trelloclient.New(
+			trelloclient.WithCredentials(cfg.TrelloAPIKey, cfg.TrelloAPIToken),
+			trelloclient.WithLogger(logger),
+		)
+		if terr != nil {
+			emitAndExit(logger, "trelloclient_init_failed", "err=%v", terr)
+		}
 	}
 	runner.SetTrelloClient(trelloClient)
 	runner.SetCardInfoFetcher(app.NewSDKCardInfoFetcher(trelloClient))
@@ -284,8 +304,31 @@ func main() {
 		}
 	}
 
-	router := app.NewRouter(ctx, cfg, runner, logger)
-	handler.Set(router)
+	var localBoardServer *http.Server
+	if cfg.BoardBackend == app.BoardBackendLocal {
+		localHandler := localboard.NewHandler(localStore, localboard.DispatchFunc(func(ctx context.Context, raw []byte) error {
+			_, err := runner.Handle(ctx, fmt.Sprintf("local-%d", time.Now().UnixNano()), raw)
+			return err
+		}))
+		localBoardServer = newLocalBoardHTTPServer(cfg.LocalBoardListen, localHandler)
+		localLn, lerr := net.Listen("tcp", cfg.LocalBoardListen)
+		if lerr != nil {
+			emitAndExit(logger, "localboard_listen_failed", "addr=%s err=%v", cfg.LocalBoardListen, lerr)
+		}
+		cfg.LocalBoardListen = localLn.Addr().String()
+		go func() {
+			sysevent.Emitf(logger, "localboard_listening", "addr=%s", cfg.LocalBoardListen)
+			if err := localBoardServer.Serve(localLn); err != nil && err != http.ErrServerClosed {
+				emitAndExit(logger, "localboard_server_error", "err=%v", err)
+			}
+		}()
+		fmt.Fprintf(os.Stdout, "jjc local board: http://%s/\n", cfg.LocalBoardListen)
+	}
+
+	if cfg.BoardBackend == app.BoardBackendTrello {
+		router := app.NewRouter(ctx, cfg, runner, logger)
+		handler.Set(router)
+	}
 
 	if term.IsTerminal(int(os.Stdin.Fd())) {
 		// TUI mode: full-screen bubbletea interface.
@@ -316,7 +359,30 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		sysevent.Emitf(logger, "http_shutdown_error", "err=%v", err)
 	}
+	closeLocalBoardHTTPServer(localBoardServer, logger)
 	sysevent.Emit(logger, "http_stopped")
+}
+
+func newLocalBoardHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		// Keep long-lived timeouts disabled: /events is an SSE response that
+		// must survive hours-long worker turns before the next card update.
+	}
+}
+
+func closeLocalBoardHTTPServer(srv *http.Server, logger sysevent.Sink) {
+	if srv == nil {
+		return
+	}
+	if logger == nil {
+		logger = sysevent.Default()
+	}
+	if err := srv.Close(); err != nil && err != http.ErrServerClosed {
+		sysevent.Emitf(logger, "localboard_close_error", "err=%v", err)
+	}
 }
 
 func emitAndExit(s sysevent.Sink, token, format string, args ...any) {

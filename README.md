@@ -98,7 +98,10 @@ Both CLI flags and environment variables are supported. CLI flags take precedenc
 
 | Flag | Environment variable | Default | Required | Description |
 |---|---|---|---|---|
+| `--board-backend` | `JJC_BOARD_BACKEND` | `trello` | | Board backend. `trello` keeps the historical Trello webhook/API path. `local` starts the built-in SQLite-backed local kanban and feeds Trello-compatible payloads into the existing dispatcher. |
 | `--listen` | `LISTEN_ADDR` | `:18790` | | HTTP listen address. |
+| `--local-board-listen` | `JJC_LOCAL_BOARD_LISTEN` | `127.0.0.1:18791` | only with `--board-backend=local` | Loopback listen address for the built-in local kanban UI/API. |
+| `--local-board-db` | `JJC_LOCAL_BOARD_DB` | `<workspace>/.jjc/local-board.sqlite` | only with `--board-backend=local` | SQLite database path for local kanban cards and comments. Created on first local-board startup. |
 | `--trello-api-secret` | `TRELLO_API_SECRET` | | **yes** | Trello API secret used for webhook signature verification (the value from your Trello webhook registration, NOT the API token). |
 | `--trello-api-key` | `TRELLO_API_KEY` | | **yes** | Trello API key. The Go SDK authenticates every outbound Trello call (board lists, card reads, comments, list moves) with this key + token pair. |
 | `--trello-api-token` | `TRELLO_API_TOKEN` | | **yes** | Trello API token. See above. |
@@ -108,6 +111,8 @@ Both CLI flags and environment variables are supported. CLI flags take precedenc
 | `--work-dir-base` | `JJC_WORK_DIR_BASE` | `C:\project` on Windows; `/var/lib/jjc/work` elsewhere | | Absolute parent directory for per-card work_dir directories. JJC creates it at startup if it does not already exist. |
 | `--config-src` | `JJC_CONFIG_SRC` | | **yes** | Source of the JJC configuration bundle: a single directory (or any [hashicorp/go-getter v2](https://github.com/hashicorp/go-getter/tree/v2) URL such as `git::https://...`, `https://...`, `github.com/owner/repo`) that holds **both** `router.hcl` and every playbook `.md` file at the top level. Local directories are used in place. Remote sources are downloaded into a per-process temp directory at startup and removed on shutdown. |
 | `--kanban-board-id` | `TRELLO_KANBAN_BOARD_ID` | | **yes** | Trello board id (24-hex string from the board URL). The `kanban {}` block in `router.hcl` is resolved against this board's lists at startup. |
+
+When `--board-backend=local`, Trello credentials, `--callback-url`, `cloudflared`, and `--kanban-board-id` are not required; the board id defaults to `local-board`, and list IDs are the local role IDs from the built-in kanban columns.
 
 ## Shutdown timing
 
@@ -197,6 +202,18 @@ jjc \
 ```
 
 JJC prints its full configuration (with `trello_api_secret`, `trello_api_key`, `trello_api_token` shown only as length fingerprints) at startup as `event=gateway_starting`.
+
+### 6. Trello-free local board
+
+Use `--board-backend=local` to start the built-in loopback kanban instead of Trello. Cards and comments are persisted in SQLite under `<workspace>/.jjc/local-board.sqlite` by default, and the browser UI emits Trello-compatible event payloads into the existing JJC dispatcher.
+
+```powershell
+jjc.exe `
+  --board-backend local `
+  --config-src ".\playbook"
+```
+
+The process prints the local board URL, defaulting to `http://127.0.0.1:18791/`. Trello credentials, Trello webhooks, and `cloudflared` are not used in this mode.
 
 ---
 

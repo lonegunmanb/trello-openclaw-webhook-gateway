@@ -233,6 +233,36 @@ func TestLoadConfigMissingRequired(t *testing.T) {
 	}
 }
 
+func TestLoadConfigLocalBoardSkipsTrelloCredentials(t *testing.T) {
+	t.Setenv("JJC_BOARD_BACKEND", "local")
+	t.Setenv("JJC_CONFIG_SRC", setupConfigSrc(t))
+	workDirBase := filepath.Join(t.TempDir(), "work")
+	t.Setenv("JJC_WORK_DIR_BASE", workDirBase)
+
+	cfg, err := LoadConfig([]string{"cmd"})
+	if err != nil {
+		t.Fatalf("load local config without trello credentials: %v", err)
+	}
+	if cfg.BoardBackend != "local" {
+		t.Fatalf("unexpected board backend: %q", cfg.BoardBackend)
+	}
+	if cfg.TrelloSecret != "" || cfg.TrelloAPIKey != "" || cfg.TrelloAPIToken != "" {
+		t.Fatalf("local board should not require or synthesize trello credentials: %#v", cfg)
+	}
+	if cfg.Tunnel != "none" {
+		t.Fatalf("local board should disable tunnel, got %q", cfg.Tunnel)
+	}
+	if cfg.KanbanBoardID != "local-board" {
+		t.Fatalf("local board should default kanban board id to local-board, got %q", cfg.KanbanBoardID)
+	}
+	if !strings.HasSuffix(filepath.ToSlash(cfg.LocalBoardDBPath), "/.jjc/local-board.sqlite") {
+		t.Fatalf("unexpected local board db path: %s", cfg.LocalBoardDBPath)
+	}
+	if cfg.LocalBoardListen != "127.0.0.1:18791" {
+		t.Fatalf("unexpected local board listen addr: %s", cfg.LocalBoardListen)
+	}
+}
+
 func TestLoadConfigDefaults(t *testing.T) {
 	t.Setenv("TRELLO_API_SECRET", "env-secret")
 	t.Setenv("TRELLO_API_KEY", "env-key")

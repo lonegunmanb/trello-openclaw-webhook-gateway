@@ -7,7 +7,7 @@ import (
 )
 
 func VerifySignature(secret string, rawBody []byte, callbackURL, headerValue string) bool {
-	if headerValue == "" {
+	if secret == "" || callbackURL == "" || headerValue == "" {
 		return false
 	}
 
