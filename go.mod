@@ -13,7 +13,8 @@ require (
 	github.com/lonegunmanb/go-trello-sdk v0.0.0-20260515024100-709a1539f128
 	github.com/lonegunmanb/hclfuncs v0.12.0
 	github.com/zclconf/go-cty v1.18.1
-	golang.org/x/term v0.43.0
+	golang.org/x/term v0.44.0
+	modernc.org/sqlite v1.52.0
 )
 
 // Pin the Copilot SDK to the lonegunmanb/copilot-sdk fork's go/v0.3.2 tag.
@@ -131,7 +132,7 @@ require (
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
@@ -140,5 +141,4 @@ require (
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.52.0 // indirect
 )
